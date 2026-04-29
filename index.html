@@ -224,31 +224,19 @@ const api = {
  * ESP32 / BLE stub.
  * Replace with real BLE / WebSocket logic.
  */
-const ble = {
-  /**
-   * Connect to an ESP32 identified by espId.
-   * Returns: cleanup function to disconnect.
-   */
-  connect: (espId, onData, onStatus) => {
-    // TODO: BLE scan for espId, connect, subscribe to characteristic
-    // onData(weightGrams) called whenever a new weight reading arrives
-    // onStatus('connected'|'disconnected'|'error') called on state changes
-    console.log('[BLE stub] connect to', espId);
-    const iv = setInterval(() => {
-      onData(Math.floor(Math.random() * 50)); // random grams consumed
-    }, 5000);
-    onStatus('connected');
-    return () => { clearInterval(iv); onStatus('disconnected'); };
-  },
+async function assignEsp(residentId, espId) {
+  // TODO: PATCH /api/residents/:residentId  body: { esp_id: espId }
+  // Backend updates the DB and manages the actual WiFi connection to the ESP
+}
 
-  /**
-   * Assign an ESP id to a resident in the backend.
-   */
-  assignEsp: async (residentId, espId) => {
-    // TODO: PATCH /api/residents/:id  { esp_id: espId }
-    await new Promise(r => setTimeout(r, 500));
-  },
-};
+async function connectEsp(residentId) {
+  // TODO: POST /api/residents/:residentId/connect
+  // Backend finds the resident's esp_id in DB, then initiates WiFi connection to that ESP
+}
+
+async function disconnectEsp(residentId) {
+  // TODO: POST /api/residents/:residentId/disconnect
+}
 
 /* ─────────────────────────────────────────
    MOCK DATA
