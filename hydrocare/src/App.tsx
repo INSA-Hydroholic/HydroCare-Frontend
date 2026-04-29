@@ -583,11 +583,6 @@ function ResidentCard({ resident, hydration, alerts, onClick }) {
         <p style={{ fontSize:11, color:'#5a7494' }}>{resident.nom}</p>
         <p style={{ fontSize:11, color:'#aab8c8', marginTop:2 }}>Ch. {resident.chambre}</p>
       </div>
-
-      {/* Alert indicator */}
-      {hasAlert && (
-        <span className="pill pill-danger" style={{ fontSize:10 }}>Alerte</span>
-      )}
     </div>
   );
 }
