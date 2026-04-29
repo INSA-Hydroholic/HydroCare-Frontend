@@ -1,36 +1,4 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --primary:   #1c5588;
-      --secondary: #00bdc8;
-      --accent:    #7acfb0;
-      --light:     #fbce9e;
-      --dark:      #f88f52;
-      --bg:        #f4f7fb;
-      --surface:   #ffffff;
-      --border:    #dce8f5;
-      --text:      #1a2a3a;
-      --text-muted:#5a7494;
-      --danger:    #e84040;
-      --warning:   #f88f52;
-      --success:   #7acfb0;
-      --disconnected: #aab8c8;
-      --shadow:    0 2px 12px rgba(28,85,136,0.08);
-      --shadow-lg: 0 8px 32px rgba(28,85,136,0.14);
-      --radius:    12px;
-      --radius-sm: 8px;
-    }
-
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    button {
+button {
       font-family: inherit;
       cursor: pointer;
       border: none;
