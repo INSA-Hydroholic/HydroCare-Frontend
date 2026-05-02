@@ -1,73 +1,31 @@
-# React + TypeScript + Vite
+1. Lancer le backend
+Le backend tourne dans Docker. Clone le repo backend et démarre les containers 
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# Démarre la base de données PostgreSQL + le serveur Express
+docker compose up -d
 
-Currently, two official plugins are available:
+# Attends enrivon 5 secondes que la DB soit prête, puis initialise le schéma
+docker compose exec server npx prisma db push
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+# Injecte les données de test
+docker compose cp prisma/seed.ts server:/app/prisma/seed.ts
+docker compose exec server npx prisma db seed
 
-## React Compiler
+2. Lancer le frontend
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+npm install
+npm run dev
+Ouvre http://localhost:5173 dans ton navigateur.
 
-## Expanding the ESLint configuration
+3. Se connecter
+Utilise le compte infirmier créé par le seed :
+ValeurIdentifiant : jean_nurse Mot de passe : Hydroholic123!
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Les comptes RESIDENT ne peuvent pas se connecter au dashboard, il est réservé au rôle STAFF.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+4. Réinitialiser les données
+Si tu veux repartir de zéro :
+bashdocker compose cp prisma/seed.ts server:/app/prisma/seed.ts
+docker compose exec server npx prisma db seed
+Les IDs seront toujours réinitialisés à 1, 2, 3, 4 (les séquences PostgreSQL sont remises à zéro dans le seed).

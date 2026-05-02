@@ -6,6 +6,8 @@ import './App.css'; // Pour lier ton CSS
 ───────────────────────────────────────── */
 const LOGO_URL = '../logo.png'; // the uploaded logo — served via same directory
 
+const API_BASE_URL = 'http://localhost:4000';
+
 // Palette helpers
 const P = {
   primary:   '#1c5588',
@@ -20,84 +22,65 @@ const P = {
    Replace function bodies with real API / BLE calls
 ───────────────────────────────────────── */
 const api = {
-  /**
-   * Authenticate a user with email + password.
-   * Expected return: { token, user: { id, name, email, role, organization } }
-   * Throw on failure.
-   */
-  login: async (email, password) => {
-    // TODO: POST /api/auth/login  { email, password }
-    await new Promise(r => setTimeout(r, 800));
-    if (email === 'admin@demo.com' && password === 'demo') {
-      return { token: 'fake-jwt', user: { id: 1, name: 'Dr. Martin', email, role: 'admin', organization: 'Résidence Les Oliviers' } };
-    }
-    if (email === 'nurse@demo.com' && password === 'demo') {
-      return { token: 'fake-jwt', user: { id: 2, name: 'Infirmière Dupont', email, role: 'nurse', organization: 'Résidence Les Oliviers' } };
-    }
-    throw new Error('Identifiants incorrects');
+  login: async (username, password) => {
+    // Correction de l'URL : ajout de /auth/
+    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) throw new Error('Identifiants incorrects');
+    return res.json();
   },
 
-  /**
-   * Create a new organization + admin account.
-   * Expected return: { token, user }
-   */
-  register: async (orgName, adminName, email, password) => {
-    // TODO: POST /api/auth/register  { orgName, adminName, email, password }
-    await new Promise(r => setTimeout(r, 1000));
-    return { token: 'fake-jwt', user: { id: 99, name: adminName, email, role: 'admin', organization: orgName } };
+  getResidents: async (token) => {
+    // Correction : ajout du préfixe /api/
+    const res = await fetch(`${API_BASE_URL}/api/users`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('Erreur lors de la récupération des résidents');
+    return await res.json();
   },
 
-  /**
-   * Fetch all residents for the current organization.
-   * Expected return: Array<Resident>
-   * Resident: { id, prenom, nom, chambre, objectif_ml, daily_goal, esp_id, ... }
-   */
-  getResidents: async () => {
-    // TODO: GET /api/residents (with auth header)
-    await new Promise(r => setTimeout(r, 600));
-    return MOCK_RESIDENTS;
+  getHydrationToday: async (userId, token) => {
+    const today = new Date().toISOString().split('T')[0];
+    // Correction : ajout du préfixe /api/
+    const res = await fetch(`${API_BASE_URL}/api/users/${userId}/consumption?startDate=${today}&endDate=${today}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) return 0;
+    const data = await res.json();
+    return data.totalVolume || 0;
   },
 
-  /**
-   * Get today's hydration for a resident (in mL).
-   * Expected return: number
-   */
-  getHydrationToday: async (residentId) => {
-    // TODO: GET /api/hydration?userId=X&from=startOfDay&to=now
-    return Math.floor(Math.random() * 1800 + 400);
+  getAlerts: async (token) => {
+    // Correction : ajout du préfixe /api/
+    const res = await fetch(`${API_BASE_URL}/api/alerts`, { 
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    return await res.json();
   },
 
-  /**
-   * Get active alerts for the organization.
-   * Expected return: Array<Alert>
-   * Alert: { id, userId, message, severity, isResolved, created_at }
-   */
-  getAlerts: async () => {
-    // TODO: GET /api/alerts?resolved=false
-    return MOCK_ALERTS;
+  getStaff: async (token) => {
+    // Correction : ajout du préfixe /api/
+    const res = await fetch(`${API_BASE_URL}/api/users`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return res.json();
   },
 
-  /**
-   * Resolve (dismiss) an alert.
-   */
-  resolveAlert: async (alertId) => {
-    // TODO: PATCH /api/alerts/:id  { isResolved: true }
-  },
-
-  /**
-   * Get staff list (admin only).
-   */
-  getStaff: async () => {
-    // TODO: GET /api/staff
-    return MOCK_STAFF;
-  },
-
-  /**
-   * Invite a new nurse account.
-   */
   inviteNurse: async (email, name) => {
-    // TODO: POST /api/staff/invite  { email, name }
     await new Promise(r => setTimeout(r, 700));
+  },
+  
+  resolveAlert: async (alertId, token) => {
+    const res = await fetch(`${API_BASE_URL}/api/alerts/${alertId}/resolve`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('Erreur résolution alerte');
+    return res.json();
   },
 };
 
@@ -106,41 +89,18 @@ const api = {
  * Replace with real BLE / WebSocket logic.
  */
 async function assignEsp(residentId, espId) {
-  // TODO: PATCH /api/residents/:residentId  body: { esp_id: espId }
+  // TODO: PATCH /api/residents/:residentId  body: { esp32Id: espId }
   // Backend updates the DB and manages the actual WiFi connection to the ESP
 }
 
 async function connectEsp(residentId) {
   // TODO: POST /api/residents/:residentId/connect
-  // Backend finds the resident's esp_id in DB, then initiates WiFi connection to that ESP
+  // Backend finds the resident's esp32Id in DB, then initiates WiFi connection to that ESP
 }
 
 async function disconnectEsp(residentId) {
   // TODO: POST /api/residents/:residentId/disconnect
 }
-
-/* ─────────────────────────────────────────
-   MOCK DATA
-───────────────────────────────────────── */
-const MOCK_RESIDENTS = [
-  { id: 1, prenom: 'Marguerite', nom: 'Fontaine', chambre: '101', objectif_ml: 1800, esp_id: 'ESP-001', sex: 'F', age: 82, weight: 58, condition: 'Alzheimer' },
-  { id: 2, prenom: 'Henri',      nom: 'Dubois',   chambre: '102', objectif_ml: 2000, esp_id: 'ESP-002', sex: 'M', age: 78, weight: 72, condition: 'Diabète type 2' },
-  { id: 3, prenom: 'Yvette',     nom: 'Moreau',   chambre: '103', objectif_ml: 1500, esp_id: null,      sex: 'F', age: 91, weight: 52, condition: null },
-  { id: 4, prenom: 'André',      nom: 'Lefevre',  chambre: '104', objectif_ml: 2200, esp_id: 'ESP-004', sex: 'M', age: 74, weight: 80, condition: 'Hypertension' },
-  { id: 5, prenom: 'Simone',     nom: 'Petit',    chambre: '105', objectif_ml: 1700, esp_id: 'ESP-005', sex: 'F', age: 85, weight: 61, condition: 'Insuffisance rénale' },
-  { id: 6, prenom: 'Robert',     nom: 'Bernard',  chambre: '106', objectif_ml: 2100, esp_id: 'ESP-006', sex: 'M', age: 79, weight: 75, condition: null },
-];
-
-const MOCK_ALERTS = [
-  { id: 1, userId: 1, message: 'Marguerite n\'a pas bu depuis 4 heures.', severity: 'high',   isResolved: false, created_at: new Date(Date.now() - 1000*60*15).toISOString() },
-  { id: 2, userId: 5, message: 'Simone est en dessous de 40% de son objectif quotidien.', severity: 'medium', isResolved: false, created_at: new Date(Date.now() - 1000*60*45).toISOString() },
-  { id: 3, userId: 3, message: 'ESP de Yvette non connecté.', severity: 'low',    isResolved: false, created_at: new Date(Date.now() - 1000*60*120).toISOString() },
-];
-
-const MOCK_STAFF = [
-  { id: 10, name: 'Dr. Martin', email: 'admin@demo.com', role: 'admin' },
-  { id: 11, name: 'Infirmière Dupont', email: 'nurse@demo.com', role: 'nurse' },
-];
 
 /* ─────────────────────────────────────────
    AUTH CONTEXT
@@ -152,8 +112,13 @@ export function AuthProvider({ children }) {
   const [user, setUser]   = useState(null);
   const [token, setToken] = useState(null);
 
-  const login = async (email, password) => {
-    const res = await api.login(email, password);
+  const login = async (username, password) => {
+    const res = await api.login(username, password);
+
+    if (res.user.role !== 'STAFF' && res.user.role !== 'ADMIN') {
+      throw new Error("Accès refusé. Ce tableau de bord est réservé au personnel de l'établissement.");
+    }
+  
     setUser(res.user);
     setToken(res.token);
   };
@@ -283,7 +248,13 @@ function LoginPage() {
   const [mode, setMode]     = useState('login'); // 'login' | 'register'
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
-  const [form, setForm]       = useState({ email:'', password:'', orgName:'', adminName:'' });
+  const [form, setForm] = useState({ 
+    username: '',
+    password: '', 
+    orgName: '', 
+    adminName: '',
+    email: '' 
+  });
 
   const set = k => e => setForm(f => ({...f, [k]: e.target.value}));
 
@@ -291,10 +262,10 @@ function LoginPage() {
     setError(''); setLoading(true);
     try {
       if (mode === 'login') {
-        await login(form.email, form.password);
+        await login(form.username, form.password);
       } else {
         if (!form.orgName || !form.adminName) throw new Error('Tous les champs sont requis');
-        await register(form.orgName, form.adminName, form.email, form.password);
+        await register(form.orgName, form.adminName, form.username, form.password);
       }
     } catch(e) { setError(e.message); }
     setLoading(false);
@@ -321,11 +292,11 @@ function LoginPage() {
       }}>
         {/* Logo + title */}
         <div style={{ textAlign:'center', marginBottom:32 }}>
-          <img src="logo.png" alt="HydroSoin"
+          <img src="logo.png" alt="HydroCare"
             style={{ width:80, height:80, objectFit:'contain', marginBottom:12 }}
             onError={e => { e.target.style.display='none'; }}
           />
-          <h1 style={{ fontSize:24, fontWeight:600, color:P.primary }}>HydroSoin</h1>
+          <h1 style={{ fontSize:24, fontWeight:600, color:P.primary }}>HydroCare</h1>
           <p style={{ color:'#5a7494', fontSize:13, marginTop:4 }}>Suivi d'hydratation en établissement</p>
         </div>
 
@@ -360,10 +331,17 @@ function LoginPage() {
           </>}
 
           <div>
-            <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Email</label>
-            <input type="email" placeholder={mode==='login'?'admin@demo.com':'votre@email.fr'}
-              value={form.email} onChange={set('email')} onKeyDown={handleKey} />
-          </div>
+          <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>
+            Identifiant (Username)
+          </label>
+          <input 
+            type="text" 
+            placeholder="Ex: jean_nurse" 
+            value={form.username} // Corrigé
+            onChange={set('username')} // Corrigé
+            onKeyDown={handleKey} 
+          />
+        </div>
           <div>
             <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Mot de passe</label>
             <input type="password" placeholder="••••••••" value={form.password} onChange={set('password')} onKeyDown={handleKey} />
@@ -378,7 +356,6 @@ function LoginPage() {
 
         {mode === 'login' && (
           <p style={{ textAlign:'center', marginTop:16, fontSize:12, color:'#aab8c8' }}>
-            Démo : admin@demo.com / demo
           </p>
         )}
       </div>
@@ -390,29 +367,26 @@ function LoginPage() {
    RESIDENT DETAIL MODAL
 ───────────────────────────────────────── */
 function ResidentModal({ resident, hydration, alerts, onClose }) {
-  const [espInput, setEspInput]   = useState(resident.esp_id || '');
-  const [espStatus, setEspStatus] = useState(resident.esp_id ? 'disconnected' : 'none');
+  const [espInput, setEspInput] = useState(resident.esp32Id ? String(resident.esp32Id) : '');
+  const [espStatus, setEspStatus] = useState(resident.esp32Id ? 'disconnected' : 'none');
   const [saving, setSaving]       = useState(false);
   const cleanupRef = useRef(null);
 
   const residentAlerts = alerts.filter(a => a.userId === resident.id && !a.isResolved);
-  const pct = Math.round(Math.min(100, (hydration / resident.objectif_ml) * 100));
+  const pct = Math.round(Math.min(100, (hydration / resident.daily_goal) * 100));
 
   const handleConnect = () => {
     if (!espInput.trim()) return;
     setEspStatus('connecting');
     // Cleanup previous connection
     if (cleanupRef.current) cleanupRef.current();
-    cleanupRef.current = ble.connect(
-      espInput.trim(),
-      (grams) => { /* TODO: update hydration in parent state */ },
-      (status) => setEspStatus(status),
-    );
+      + connectEsp(resident.id);
+      + setEspStatus('connected');
   };
 
   const handleSaveEsp = async () => {
     setSaving(true);
-    await ble.assignEsp(resident.id, espInput.trim());
+    + await assignEsp(resident.id, espInput.trim());
     setSaving(false);
   };
 
@@ -441,14 +415,14 @@ function ResidentModal({ resident, hydration, alerts, onClose }) {
               display:'flex', alignItems:'center', justifyContent:'center',
               fontSize:22, fontWeight:700,
             }}>
-              {resident.prenom[0]}{resident.nom[0]}
+              {resident.name[0]}{resident.surname[0]}
             </div>
             <div>
-              <h2 style={{ fontSize:18, fontWeight:600 }}>{resident.prenom} {resident.nom}</h2>
+              <h2 style={{ fontSize:18, fontWeight:600 }}>{resident.name} {resident.surname}</h2>
               <p style={{ opacity:0.8, fontSize:13 }}>Chambre {resident.chambre}</p>
             </div>
             <div style={{ marginLeft:'auto' }}>
-              <HydrationCircle current={hydration} goal={resident.objectif_ml} size={64} />
+              <HydrationCircle current={hydration} goal={resident.daily_goal} size={64} />
             </div>
           </div>
         </div>
@@ -458,12 +432,12 @@ function ResidentModal({ resident, hydration, alerts, onClose }) {
           {/* Info grid */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
             {[
-              ['Objectif', `${resident.objectif_ml} mL`],
+              ['Objectif', `${resident.daily_goal} mL`],
               ['Consommé aujourd\'hui', `${hydration} mL (${pct}%)`],
               ['Âge', resident.age ? `${resident.age} ans` : '—'],
               ['Poids', resident.weight ? `${resident.weight} kg` : '—'],
               ['Sexe', resident.sex === 'M' ? 'Homme' : 'Femme'],
-              ['Condition', resident.condition || '—'],
+              ['Condition', resident.condition ?? '—'],
             ].map(([label, val]) => (
               <div key={label} style={{ background:'#f4f7fb', borderRadius:8, padding:'10px 14px' }}>
                 <p style={{ fontSize:11, color:'#5a7494', marginBottom:2 }}>{label}</p>
@@ -537,9 +511,9 @@ function ResidentModal({ resident, hydration, alerts, onClose }) {
    RESIDENT CARD
 ───────────────────────────────────────── */
 function ResidentCard({ resident, hydration, alerts, onClick }) {
-  const hasAlert    = alerts.some(a => a.userId === resident.id && !a.isResolved && a.severity === 'high');
+  const hasAlert   = alerts.some(a => a.userId === resident.id && !a.isResolved && a.severity === 'RED');
   const hasWarning  = alerts.some(a => a.userId === resident.id && !a.isResolved);
-  const isConnected = !!resident.esp_id;
+  const isConnected = !!resident.esp32Id;
 
   const dotStatus = !isConnected ? 'disconnected' : hasAlert ? 'danger' : hasWarning ? 'warning' : 'ok';
 
@@ -569,19 +543,21 @@ function ResidentCard({ resident, hydration, alerts, onClick }) {
         display:'flex', alignItems:'center', justifyContent:'center',
         fontSize:16, fontWeight:700, color:P.primary, flexShrink:0,
       }}>
-        {resident.prenom[0]}{resident.nom[0]}
+        {resident.name[0]}{resident.surname[0]}
       </div>
 
       {/* Hydration circle */}
-      <HydrationCircle current={hydration} goal={resident.objectif_ml} size={70} />
+      <HydrationCircle current={hydration} goal={resident.daily_goal} size={70} />
 
       {/* Name */}
       <div style={{ textAlign:'center' }}>
         <p style={{ fontSize:13, fontWeight:600, color:P.primary, lineHeight:1.2 }}>
-          {resident.prenom}
+          {resident.name}
         </p>
-        <p style={{ fontSize:11, color:'#5a7494' }}>{resident.nom}</p>
-        <p style={{ fontSize:11, color:'#aab8c8', marginTop:2 }}>Ch. {resident.chambre}</p>
+        <p style={{ fontSize:11, color:'#5a7494' }}>{resident.surname}</p>
+         <p style={{ fontSize:11, color:'#aab8c8', marginTop:2 }}>
+      +     {resident.chambre ? `Ch. ${resident.chambre}` : ''}
+      + </p>
       </div>
     </div>
   );
@@ -597,8 +573,8 @@ function NotifPanel({ alerts, residents, onResolve }) {
     return `Il y a ${Math.round(mins/60)} h`;
   };
 
-  const sevColor = { high:'#fde8e8', medium:'#fef0e2', low:'#f4f7fb' };
-  const sevBorder = { high:'#e84040', medium:'#f88f52', low:'#aab8c8' };
+  const sevColor  = { RED:'#fde8e8', YELLOW:'#fef0e2' };
+  const sevBorder = { RED:'#e84040', YELLOW:'#f88f52' };
 
   return (
     <div style={{
@@ -634,7 +610,7 @@ function NotifPanel({ alerts, residents, onResolve }) {
             }}>
               {res && (
                 <p style={{ fontSize:11, fontWeight:600, color:P.primary, marginBottom:3 }}>
-                  {res.prenom} {res.nom} · Ch.{res.chambre}
+                  {res.name} {res.surname} · Ch.{res.chambre}
                 </p>
               )}
               <p style={{ fontSize:12, color:'#1a2a3a', marginBottom:4 }}>{alert.message}</p>
@@ -674,7 +650,7 @@ function Navbar({ alertCount }) {
       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
         <img src="logo.png" alt="" style={{ width:32, height:32, objectFit:'contain' }}
           onError={e => { e.target.style.display='none'; }} />
-        <span style={{ fontWeight:700, fontSize:16, color:P.primary }}>HydroSoin</span>
+        <span style={{ fontWeight:700, fontSize:16, color:P.primary }}>HydroCare</span>
         <span style={{ fontSize:12, color:'#aab8c8', marginLeft:4 }}>{user?.organization}</span>
       </div>
 
@@ -742,6 +718,7 @@ function Navbar({ alertCount }) {
    DASHBOARD
 ───────────────────────────────────────── */
 function Dashboard() {
+  const { token } = useAuth();
   const [residents, setResidents]   = useState([]);
   const [hydration, setHydration]   = useState({});
   const [alerts, setAlerts]         = useState([]);
@@ -749,18 +726,27 @@ function Dashboard() {
   const [selected, setSelected]     = useState(null);
 
   const load = useCallback(async () => {
+    if (!token) return;
     setLoading(true);
-    const [res, alts] = await Promise.all([api.getResidents(), api.getAlerts()]);
-    setResidents(res);
-    setAlerts(alts);
-    // Fetch hydration for each resident
-    const hydMap = {};
-    await Promise.all(res.map(async r => {
-      hydMap[r.id] = await api.getHydrationToday(r.id);
-    }));
-    setHydration(hydMap);
+    try {
+      // 1. Récupère la liste des utilisateurs depuis UserDAO via l'API[cite: 8]
+      const res = await api.getResidents(token);
+      setResidents(res);
+
+      // 2. Récupère la consommation pour chaque résident via HydrationDAO[cite: 13]
+      const hydMap = {};
+      await Promise.all(res.map(async r => {
+        hydMap[r.id] = await api.getHydrationToday(r.id, token);
+      }));
+      setHydration(hydMap);
+
+      const alertsData = await api.getAlerts(token);
+      setAlerts(Array.isArray(alertsData) ? alertsData : []);
+    } catch (e) {
+      console.error("Erreur de chargement:", e);
+    }
     setLoading(false);
-  }, []);
+  }, [token]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -768,11 +754,17 @@ function Dashboard() {
   // e.g. const ws = new WebSocket(WS_URL); ws.onmessage = handleWsMessage;
 
   const resolveAlert = async (alertId) => {
-    await api.resolveAlert(alertId);
-    setAlerts(prev => prev.map(a => a.id === alertId ? {...a, isResolved:true} : a));
+    try {
+      await api.resolveAlert(alertId, token);
+      setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, isResolved: true } : a));
+    } catch (e) {
+      console.error("Erreur résolution alerte:", e);
+    }
   };
 
   const activeAlerts = alerts.filter(a => !a.isResolved);
+  const espConnected = residents.filter(r => r.esp32Id).length; // Utilise esp32Id
+  const goalsReached = residents.filter(r => (hydration[r.id] || 0) >= r.daily_goal).length; // Utilise daily_goal
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--bg)' }}>
@@ -784,10 +776,8 @@ function Dashboard() {
           {[
             { label:'Résidents', value: residents.length, color:P.primary },
             { label:'Alertes actives', value: activeAlerts.length, color: activeAlerts.length ? '#e84040' : P.accent },
-            { label:'ESP connectés', value: residents.filter(r=>r.esp_id).length, color:P.secondary },
-            { label:'Objectifs atteints', value: Object.values(hydration).filter((h,i) => {
-                const r = residents[i]; return r && h >= r.objectif_ml;
-              }).length, color:P.accent },
+            { label:'ESP connectés', value: espConnected, color:P.secondary },
+            { label:'Objectifs atteints', value: goalsReached, color:P.accent },
           ].map(({ label, value, color }) => (
             <div key={label} style={{
               background:'#fff', borderRadius:12, padding:'16px 20px',
@@ -901,7 +891,7 @@ function ProfilePage() {
           {/* Form */}
           <div style={{ padding:24, display:'flex', flexDirection:'column', gap:16 }}>
             <div>
-              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Nom complet</label>
+              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>surname complet</label>
               <input value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} />
             </div>
             <div>
@@ -977,7 +967,7 @@ function AdminPage() {
           </h2>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
             <div>
-              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Nom</label>
+              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>surname</label>
               <input placeholder="Marie Curie" value={invite.name} onChange={e => setInvite(f=>({...f,name:e.target.value}))} />
             </div>
             <div>
