@@ -1,31 +1,37 @@
-1. Lancer le backend
-Le backend tourne dans Docker. Clone le repo backend et démarre les containers 
+1. Start the backend
+The backend runs with a docker. Clone the backend repository (https://github.com/INSA-Hydroholic/Hydroholic-back) and start the containers.
 
-# Démarre la base de données PostgreSQL + le serveur Express
-docker compose up -d
+# Start the Postgres DB and the Express server
+docker compose up -d --build
 
-# Attends enrivon 5 secondes que la DB soit prête, puis initialise le schéma
+# Wait ~5s for the DB to be ready and initialize the schema
 docker compose exec server npx prisma db push
 
-# Injecte les données de test
+# Inject and execute seed.ts to create mock data
 docker compose cp prisma/seed.ts server:/app/prisma/seed.ts
 docker compose exec server npx prisma db seed
 
-2. Lancer le frontend
+# npx prisma studio
+If you want to visualize the database with Prisma Studio, you can execute the command:
+docker compose exec server npx prisma studio --port 5555 --browser none
+
+
+2. Start the frontend
 
 npm install
 npm run dev
-Ouvre http://localhost:5173 dans ton navigateur.
+Open http://localhost:5173 in the browser.
 
-3. Se connecter
-Utilise le compte infirmier créé par le seed :
-ValeurIdentifiant : jean_nurse Mot de passe : Hydroholic123!
+3. Connect to the site
+Use the Staff Account created by our seed :
+Username: jean_nurse
+Password : Hydroholic123!
 
-Les comptes RESIDENT ne peuvent pas se connecter au dashboard, il est réservé au rôle STAFF.
+RESIDENTS cannot connect to the dashboard, it's reserved to people with the STAFF role.
 
-
-4. Réinitialiser les données
-Si tu veux repartir de zéro :
+4. Reinitialize the data
+If you wish to start over :
 bashdocker compose cp prisma/seed.ts server:/app/prisma/seed.ts
 docker compose exec server npx prisma db seed
-Les IDs seront toujours réinitialisés à 1, 2, 3, 4 (les séquences PostgreSQL sont remises à zéro dans le seed).
+
+The IDs will always be reinitialized to 1, 2, 3, 4 (the POSTGRE sequences are rolled back to 0 in the seed script).
