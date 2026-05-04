@@ -253,7 +253,9 @@ function LoginPage() {
     password: '', 
     orgName: '', 
     adminName: '',
-    email: '' 
+    adminFirstName: '',
+    adminAddress: '',
+    adminEmail: '',
   });
 
   const set = k => e => setForm(f => ({...f, [k]: e.target.value}));
@@ -325,8 +327,20 @@ function LoginPage() {
               <input placeholder="Résidence Les Oliviers" value={form.orgName} onChange={set('orgName')} onKeyDown={handleKey} />
             </div>
             <div>
+              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Adresse</label>
+              <input placeholder="123 Rue de la Paix" value={form.adminAddress} onChange={set('adminAddress')} onKeyDown={handleKey} />
+            </div>
+            <div>
               <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Votre nom</label>
-              <input placeholder="Dr. Martin" value={form.adminName} onChange={set('adminName')} onKeyDown={handleKey} />
+              <input placeholder="Dupont" value={form.adminName} onChange={set('adminName')} onKeyDown={handleKey} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Votre prénom</label>
+              <input placeholder="Marie" value={form.adminFirstName} onChange={set('adminFirstName')} onKeyDown={handleKey} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Email</label>
+              <input placeholder="marie.dupont@exemple.com" value={form.adminEmail} onChange={set('adminEmail')} onKeyDown={handleKey} />
             </div>
           </>}
 
@@ -336,7 +350,7 @@ function LoginPage() {
           </label>
           <input 
             type="text" 
-            placeholder="Ex: jean_nurse" 
+            placeholder="Ex: Marie_Dupont" 
             value={form.username} // Corrigé
             onChange={set('username')} // Corrigé
             onKeyDown={handleKey} 
