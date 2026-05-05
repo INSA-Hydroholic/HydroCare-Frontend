@@ -82,7 +82,20 @@ const api = {
     if (!res.ok) throw new Error('Erreur résolution alerte');
     return res.json();
   },
-};
+
+  register: async (formData) => {
+  const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData), // We send everything
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Erreur lors de la création');
+      }
+      return res.json();
+    },
+  };
 
 /**
  * ESP32 / BLE stub.
@@ -123,8 +136,8 @@ export function AuthProvider({ children }) {
     setToken(res.token);
   };
 
-  const register = async (orgName, adminName, email, password) => {
-    const res = await api.register(orgName, adminName, email, password);
+  const register = async (formData) => {
+    const res = await api.register(formData);
     setUser(res.user);
     setToken(res.token);
   };
@@ -266,8 +279,8 @@ function LoginPage() {
       if (mode === 'login') {
         await login(form.username, form.password);
       } else {
-        if (!form.orgName || !form.adminName) throw new Error('Tous les champs sont requis');
-        await register(form.orgName, form.adminName, form.username, form.password);
+        if (!form) throw new Error('Tous les champs sont requis');
+        await register(form);
       }
     } catch(e) { setError(e.message); }
     setLoading(false);
@@ -331,11 +344,11 @@ function LoginPage() {
               <input placeholder="123 Rue de la Paix" value={form.adminAddress} onChange={set('adminAddress')} onKeyDown={handleKey} />
             </div>
             <div>
-              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Votre nom</label>
+              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Nom</label>
               <input placeholder="Dupont" value={form.adminName} onChange={set('adminName')} onKeyDown={handleKey} />
             </div>
             <div>
-              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Votre prénom</label>
+              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Prénom</label>
               <input placeholder="Marie" value={form.adminFirstName} onChange={set('adminFirstName')} onKeyDown={handleKey} />
             </div>
             <div>
@@ -346,7 +359,7 @@ function LoginPage() {
 
           <div>
           <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>
-            Identifiant (Username)
+            Identifiant
           </label>
           <input 
             type="text" 
@@ -394,13 +407,13 @@ function ResidentModal({ resident, hydration, alerts, onClose }) {
     setEspStatus('connecting');
     // Cleanup previous connection
     if (cleanupRef.current) cleanupRef.current();
-      + connectEsp(resident.id);
-      + setEspStatus('connected');
+      connectEsp(resident.id);
+      setEspStatus('connected');
   };
 
   const handleSaveEsp = async () => {
     setSaving(true);
-    + await assignEsp(resident.id, espInput.trim());
+    await assignEsp(resident.id, espInput.trim());
     setSaving(false);
   };
 
@@ -433,7 +446,7 @@ function ResidentModal({ resident, hydration, alerts, onClose }) {
             </div>
             <div>
               <h2 style={{ fontSize:18, fontWeight:600 }}>{resident.name} {resident.surname}</h2>
-              <p style={{ opacity:0.8, fontSize:13 }}>Chambre {resident.chambre}</p>
+              <p style={{ opacity:0.8, fontSize:13 }}>Chambre {resident.room}</p>
             </div>
             <div style={{ marginLeft:'auto' }}>
               <HydrationCircle current={hydration} goal={resident.daily_goal} size={64} />
@@ -570,8 +583,8 @@ function ResidentCard({ resident, hydration, alerts, onClick }) {
         </p>
         <p style={{ fontSize:11, color:'#5a7494' }}>{resident.surname}</p>
          <p style={{ fontSize:11, color:'#aab8c8', marginTop:2 }}>
-      +     {resident.chambre ? `Ch. ${resident.chambre}` : ''}
-      + </p>
+           {resident.room ? `Ch. ${resident.room}` : ''}
+       </p>
       </div>
     </div>
   );
@@ -624,7 +637,7 @@ function NotifPanel({ alerts, residents, onResolve }) {
             }}>
               {res && (
                 <p style={{ fontSize:11, fontWeight:600, color:P.primary, marginBottom:3 }}>
-                  {res.name} {res.surname} · Ch.{res.chambre}
+                  {res.name} {res.surname} · Ch.{res.room}
                 </p>
               )}
               <p style={{ fontSize:12, color:'#1a2a3a', marginBottom:4 }}>{alert.message}</p>
@@ -708,7 +721,7 @@ function Navbar({ alertCount }) {
                   color:P.primary, background:'transparent', borderBottom:'1px solid #dce8f5' }}>
                 Mon profil
               </button>
-              {user?.role === 'admin' && (
+              {user?.role === 'ADMIN' && (
                 <button onClick={() => { navigate('admin'); setMenuOpen(false); }}
                   style={{ width:'100%', textAlign:'left', padding:'12px 16px', fontSize:13,
                     color:P.primary, background:'transparent', borderBottom:'1px solid #dce8f5' }}>
@@ -861,7 +874,7 @@ function ProfilePage() {
   const { user, logout } = useAuth();
   const { navigate }     = useRoute();
   const [saved, setSaved] = useState(false);
-  const [form, setForm]   = useState({ name: user?.name || '', email: user?.email || '' });
+  const [form, setForm]   = useState({ name: user?.name || '', surname: user?.surname || '', email: user?.email || '' });
 
   const save = async () => {
     // TODO: PATCH /api/users/:id  { name, email }
@@ -898,14 +911,18 @@ function ProfilePage() {
             </div>
             <h2 style={{ color:'#fff', fontWeight:600, fontSize:18 }}>{user?.name}</h2>
             <p style={{ color:'rgba(255,255,255,0.75)', fontSize:13 }}>
-              {user?.role === 'admin' ? 'Administrateur' : 'Infirmier(ère)'} · {user?.organization}
+              {user?.role === 'ADMIN' ? 'Administrateur' : 'Infirmier(ère)'} · {user?.organization}
             </p>
           </div>
 
           {/* Form */}
           <div style={{ padding:24, display:'flex', flexDirection:'column', gap:16 }}>
             <div>
-              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>surname complet</label>
+              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Nom</label>
+              <input value={form.surname} onChange={e => setForm(f=>({...f,surname:e.target.value}))} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Prenom</label>
               <input value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} />
             </div>
             <div>
@@ -914,7 +931,7 @@ function ProfilePage() {
             </div>
             <div>
               <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>Rôle</label>
-              <input value={user?.role === 'admin' ? 'Administrateur' : 'Infirmier(ère)'} disabled
+              <input value={user?.role === 'ADMIN' ? 'Administrateur' : 'Infirmier(ère)'} disabled
                 style={{ background:'#f4f7fb', cursor:'not-allowed' }} />
             </div>
             <Btn variant="primary" onClick={save} style={{ alignSelf:'flex-start' }}>
