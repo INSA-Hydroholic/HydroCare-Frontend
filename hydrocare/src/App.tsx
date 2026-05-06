@@ -33,8 +33,8 @@ const api = {
     return res.json();
   },
 
-  getResidents: async (token) => {
-    const res = await fetch(`${API_BASE_URL}/api/users`, {
+  getResidents: async (token, organizationId) => {
+    const res = await fetch(`${API_BASE_URL}/api/users?filter=RESIDENT&organizationId=${organizationId}`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) throw new Error('Erreur lors de la récupération des résidents');
@@ -69,11 +69,6 @@ const api = {
     return res.json();
   },
 
-  //TODO : changer inviteNurse en addUser(role:nurse)
-  inviteNurse: async (email, name) => {
-    await new Promise(r => setTimeout(r, 700));
-  },
-  
   //TODO : changer l'endpoint
   resolveAlert: async (alertId, token) => {
     const res = await fetch(`${API_BASE_URL}/api/alerts/${alertId}/resolve`, {
@@ -84,7 +79,7 @@ const api = {
     return res.json();
   },
 
-  addUser: async (role: 'nurse' | 'resident', data: { username: string, email: string, password: string }, token: string) => {
+  addUser: async (role: 'nurse' | 'resident', data: { username: string, email: string, password: string, first_name: string, surname: string }, token: string) => {
     const res = await fetch(`${API_BASE_URL}/api/users/addUser/${role}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -686,12 +681,12 @@ function NotifPanel({ alerts, residents, onResolve }) {
 
 function AddUserModal({ role, onClose, onSuccess }) {
   const { token } = useAuth();
-  const [form, setForm] = useState({ username: '', email: '', password: '' });
+  const [form, setForm] = useState({ username: '', email: '', password: '' , first_name: '', surname: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const submit = async () => {
-    if (!form.username || !form.email || !form.password) {
+  const submit = async () => { 
+    if (!form.username || !form.email || !form.password || !form.first_name || !form.surname) {
       setError('Please fill in all fields');
       return;
     }
@@ -706,19 +701,19 @@ function AddUserModal({ role, onClose, onSuccess }) {
     setLoading(false);
   };
 
-  const label = role === 'nurse' ? 'infirmier(ère)' : 'résident(e)';
+  const label = role === 'nurse' ? 'nurse' : 'resident';
 
   return (
     <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ padding: 24, maxWidth: 400 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, color: P.primary, marginBottom: 20 }}>
-          Ajouter un(e) {label}
+          Add a {label}
         </h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {['username', 'email', 'password'].map(field => (
+          {['username', 'email', 'password', 'first_name', 'surname'].map(field => (
             <div key={field}>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#5a7494', display: 'block', marginBottom: 4 }}>
-                {field === 'username' ? 'Identifiant' : field === 'email' ? 'Email' : 'Mot de passe'}
+                {field === 'username' ? 'Username' : field === 'email' ? 'Email' : field === 'first_name' ? 'First Name' : field === 'surname' ? 'Surname' : 'Password'}
               </label>
               <input
                 type={field === 'password' ? 'password' : 'text'}
@@ -834,15 +829,15 @@ function Dashboard() {
   const [modal, setModal]           = useState(null);
   const [connCode, setConnCode]     = useState('');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showSpinner = true) => {
     if (!token) return;
-    setLoading(true);
+    if (showSpinner) setLoading(true);
     try {
-      // 1. Récupère la liste des utilisateurs depuis UserDAO via l'API[cite: 8]
-      const res = await api.getResidents(token);
+      // 1. Récupère la liste des utilisateurs depuis UserDAO
+      const res = await api.getResidents(token, user?.organizationId);
       setResidents(res);
 
-      // 2. Récupère la consommation pour chaque résident via HydrationDAO[cite: 13]
+      // 2. Récupère la consommation pour chaque résident
       const hydMap = {};
       await Promise.all(res.map(async r => {
         hydMap[r.id] = await api.getHydrationToday(r.id, token);
@@ -858,6 +853,11 @@ function Dashboard() {
   }, [token]);
 
   useEffect(() => { load(); }, [load]);
+  
+  useEffect(() => {
+    const interval = setInterval(() => load(false), 5000);
+    return () => clearInterval(interval);
+  }, [load]);
 
   // TODO: subscribe to WebSocket for real-time alerts
   // e.g. const ws = new WebSocket(WS_URL); ws.onmessage = handleWsMessage;
@@ -875,6 +875,8 @@ function Dashboard() {
   const espConnected = residents.filter(r => r.esp32Id).length; // Utilise esp32Id
   const goalsReached = residents.filter(r => (hydration[r.id] || 0) >= r.daily_goal).length; // Utilise daily_goal
 
+  
+  
   return (
     <div style={{ minHeight:'100vh', background:'var(--bg)' }}>
       <Navbar alertCount={activeAlerts.length} />
@@ -901,9 +903,10 @@ function Dashboard() {
         {/* Main layout: grid + notifs */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:20, alignItems:'start' }}>
           {/* Resident grid */}
+          
           <div>
 
-            // Buttons
+            {/* Buttons */}
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
               <h2 style={{ fontSize:15, fontWeight:600, color:P.primary }}>
                 Résidents
@@ -964,7 +967,7 @@ function Dashboard() {
       </div>
 
       {/* Modal */}
-      // Pop-Up for clicking a resident
+      {/* Pop Up for clicking a resident */}
       {selected && (
         <ResidentModal
           resident={selected}
@@ -974,7 +977,7 @@ function Dashboard() {
         />
       )}
 
-      // Pop-Up for adding nurse or resident
+      {/* Pop-Up for adding nurse or resident */}
       {(modal === 'nurse' || modal === 'resident') && (
         <AddUserModal
           role={modal}
@@ -983,7 +986,7 @@ function Dashboard() {
         />
       )}
 
-      // Pop-Up for connection code
+      {/* Pop-Up for connection code */}
       {modal === 'code' && (
         <div className="overlay" onClick={() => setModal(null)}>
           <div className="modal" style={{ padding:32, maxWidth:420 }}
