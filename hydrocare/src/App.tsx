@@ -52,30 +52,19 @@ const api = {
     return data.totalVolume || 0;
   },
 
-  getAlerts: async (token) => {
-    // Correction : ajout du préfixe /api/
-    const res = await fetch(`${API_BASE_URL}/api/alerts`, { 
+  getAlerts: async (token, establishmentId) => {
+    const res = await fetch(`${API_BASE_URL}/api/organization/${establishmentId}/alerts`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) return [];
-    return await res.json();
+    const data = await res.json();
+    return data.alerts || [];
   },
 
   getStaff: async (token) => {
-    // Correction : ajout du préfixe /api/
     const res = await fetch(`${API_BASE_URL}/api/users`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
-    return res.json();
-  },
-
-  //TODO : changer l'endpoint
-  resolveAlert: async (alertId, token) => {
-    const res = await fetch(`${API_BASE_URL}/api/alerts/${alertId}/resolve`, {
-      method: 'PATCH',
-      headers: { 'Authorization': `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error('Erreur résolution alerte');
     return res.json();
   },
 
@@ -97,6 +86,33 @@ const api = {
     return res.json();
   },
 
+  listDevices: async (organizationId: number, token: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/device/${organizationId}/listDevices`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  // Uses device ID and not mac
+  bindUserDevice: async (userId: number, deviceId: String, token: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/users/${userId}/${deviceId}/bindDevice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('Error affecting device. It may already be in use');
+    return res.json();
+  },
+
+  unbindUserDevice: async (userId: number, deviceId: String, token: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/users/${userId}/${deviceId}/unbindDevice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('Error affecting device. It may already be in use');
+    return res.json();
+  },
+
   register: async (formData) => {
   const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
@@ -111,23 +127,6 @@ const api = {
     },
   };
 
-/**
- * ESP32 / BLE stub.
- * Replace with real BLE / WebSocket logic.
- */
-async function assignEsp(residentId, espId) {
-  // TODO: PATCH /api/residents/:residentId  body: { esp32Id: espId }
-  // Backend updates the DB and manages the actual WiFi connection to the ESP
-}
-
-async function connectEsp(residentId) {
-  // TODO: POST /api/residents/:residentId/connect
-  // Backend finds the resident's esp32Id in DB, then initiates WiFi connection to that ESP
-}
-
-async function disconnectEsp(residentId) {
-  // TODO: POST /api/residents/:residentId/disconnect
-}
 
 /* ─────────────────────────────────────────
    AUTH CONTEXT
@@ -407,34 +406,55 @@ function LoginPage() {
 /* ─────────────────────────────────────────
    RESIDENT DETAIL MODAL
 ───────────────────────────────────────── */
-function ResidentModal({ resident, hydration, alerts, onClose }) {
+function ResidentModal({ resident, devices, hydration, alerts, onClose }) {
 
-  // Changer
-  //////////////////////////////////////////////////////////////////////
-  const [espInput, setEspInput] = useState(resident.esp32Id ? String(resident.esp32Id) : '');
-  const [espStatus, setEspStatus] = useState(resident.esp32Id ? 'disconnected' : 'none');
-  //////////////////////////////////////////////////////////////////////
+  const { token } = useAuth();
 
+  // Check the resident's ESP32 status
+  const hasDevice = !!resident.esp32Id;
+  const isDisconnected = alerts.some(a => a.userId === resident.id && a.severity === 'GREY');
+  const espStatus = !hasDevice ? 'unbound' : isDisconnected ? 'disconnected' : 'connected';
+
+  // Define the macAddress of the selected device based on the resident's current binding
+  const [selectedDeviceId, setSelectedDeviceId] = useState(
+    resident.esp32?.macAddress || ''
+  );
 
 
   const [saving, setSaving]       = useState(false);
   const cleanupRef = useRef(null);
 
-  const residentAlerts = alerts.filter(a => a.userId === resident.id && !a.isResolved);
+  const residentAlerts = alerts.filter(a => a.userId === resident.id);
   const pct = Math.round(Math.min(100, (hydration / resident.daily_goal) * 100));
+  
+  const [deviceError, setDeviceError] = useState('');
 
-  const handleConnect = () => {
-    if (!espInput.trim()) return;
-    setEspStatus('connecting');
-    // Cleanup previous connection
-    if (cleanupRef.current) cleanupRef.current();
-      connectEsp(resident.id);
-      setEspStatus('connected');
+  const handleDeviceSelect = (e) => {
+    setSelectedDeviceId(e.target.value);
+    setDeviceError('');
   };
 
-  const handleSaveEsp = async () => {
+  const handleBind = async () => {
+    if (!selectedDeviceId) return;
     setSaving(true);
-    await assignEsp(resident.id, espInput.trim());
+    setDeviceError('');
+    try {
+      await api.bindUserDevice(resident.id, selectedDeviceId, token);
+    } catch (err) {
+      setDeviceError('Failed to assign device. Please try again.');
+    }
+    setSaving(false);
+  };
+
+  const handleUnbind = async () => {
+    setSaving(true);
+    setDeviceError('');
+    try {
+      await api.unbindUserDevice(resident.id, selectedDeviceId, token);
+      setSelectedDeviceId('');
+    } catch (err) {
+      setDeviceError('Failed to disconnect device.');
+    }
     setSaving(false);
   };
 
@@ -513,42 +533,83 @@ function ResidentModal({ resident, hydration, alerts, onClose }) {
 
           {/* ESP32 section */}
           <div style={{ borderTop:`1px solid #dce8f5`, paddingTop:20 }}>
-            <h3 style={{ fontSize:13, fontWeight:600, marginBottom:12, color:'#5a7494' }}>
-              Capteur ESP32
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, color: '#5a7494', margin: 0 }}>
+                  ESP32 Device
+                </h3>
+                
+                {resident.esp32 && (
+                  <div style={{ display: 'flex', gap: 12, fontSize: 12, fontWeight: 500, color: P.primary }}>
+                    <span>🆔 {resident.esp32.macAddress}</span>
+                    {resident.esp32.batteryLevel != null && (
+                      <span>🔋 {resident.esp32.batteryLevel}%</span>
+                    )}
+                  </div>
+                )}
+              </div>
 
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
-              <StatusDot status={
-                espStatus === 'connected' ? 'ok' :
-                espStatus === 'error' ? 'danger' : 'disconnected'
-              } size={10} />
-              <span style={{ fontSize:13, color:'#5a7494' }}>
-                {espStatus === 'connected'   ? 'Connecté' :
-                 espStatus === 'connecting'  ? 'Connexion en cours…' :
-                 espStatus === 'error'       ? 'Erreur de connexion' :
-                 espStatus === 'none'        ? 'Aucun ESP assigné' : 'Déconnecté'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <StatusDot 
+                status={
+                  espStatus === 'connected' ? 'ok' : 
+                  espStatus === 'unbound' ? 'none' : 'disconnected'
+                } 
+                size={10} 
+              />
+              
+              <span style={{ fontSize: 13, color: '#5a7494', textTransform: 'capitalize' }}>
+                {espStatus === 'unbound' ? 'Unbound' :
+                espStatus === 'disconnected' ? 'Disconnected' : 'Connected'}
               </span>
+              
+              {saving && <Spinner size={12} />}
             </div>
 
-            <div style={{ display:'flex', gap:8 }}>
-              <input
-                placeholder="ID de l'ESP (ex: ESP-001)"
-                value={espInput}
-                onChange={e => setEspInput(e.target.value)}
-                style={{ flex:1, fontSize:13 }}
-              />
-              <Btn variant="ghost" onClick={handleSaveEsp} loading={saving} style={{ whiteSpace:'nowrap', padding:'10px 14px' }}>
-                Sauvegarder
+            <select
+              value={selectedDeviceId}
+              onChange={handleDeviceSelect}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 8,
+                border: '1.5px solid #dce8f5', fontSize: 13,
+                color: P.primary, background: '#fff', cursor: 'pointer',
+              }}
+            >
+              <option value="">— Select a device —</option>
+              {devices.map(d => (
+                <option key={d.id} value={d.macAddress}>
+                  Device {d.macAddress}
+                </option>
+              ))}
+            </select>
+
+            {deviceError && (
+              <p style={{ color: '#e84040', fontSize: 12, marginTop: 6 }}>{deviceError}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <Btn
+                variant="secondary"
+                onClick={handleBind}
+                loading={saving}
+                disabled={!selectedDeviceId}
+                style={{ flex: 1, justifyContent: 'center' }}
+              >
+                Connect
+              </Btn>
+              <Btn
+                variant="danger"
+                onClick={handleUnbind}
+                loading={saving}
+                disabled={!resident.esp32?.macAddress}
+                style={{ flex: 1, justifyContent: 'center' }}
+              >
+                Disconnect
               </Btn>
             </div>
 
-            <Btn variant="secondary" onClick={handleConnect}
-              disabled={!espInput.trim() || espStatus === 'connecting'}
-              style={{ marginTop:10, width:'100%', justifyContent:'center' }}>
-              {espStatus === 'connecting' ? 'Connexion…' :
-               espStatus === 'connected'  ? 'Reconnecter' : 'Connecter'}
-            </Btn>
+
           </div>
+
         </div>
       </div>
     </div>
@@ -615,12 +676,6 @@ function ResidentCard({ resident, hydration, alerts, onClick }) {
    NOTIFICATIONS PANEL
 ───────────────────────────────────────── */
 function NotifPanel({ alerts, residents, onResolve }) {
-  const timeAgo = iso => {
-    const mins = Math.round((Date.now() - new Date(iso)) / 60000);
-    if (mins < 60) return `Il y a ${mins} min`;
-    return `Il y a ${Math.round(mins/60)} h`;
-  };
-
   const sevColor  = { RED:'#fde8e8', YELLOW:'#fef0e2' };
   const sevBorder = { RED:'#e84040', YELLOW:'#f88f52' };
 
@@ -663,13 +718,7 @@ function NotifPanel({ alerts, residents, onResolve }) {
               )}
               <p style={{ fontSize:12, color:'#1a2a3a', marginBottom:4 }}>{alert.message}</p>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span style={{ fontSize:11, color:'#aab8c8' }}>{timeAgo(alert.created_at)}</span>
-                <button onClick={() => onResolve(alert.id)} style={{
-                  background:'transparent', fontSize:11, color:'#5a7494',
-                  textDecoration:'underline', cursor:'pointer',
-                }}>
-                  Résoudre
-                </button>
+                <span style={{ fontSize:11, color:'#aab8c8' }}></span>
               </div>
             </div>
           );
@@ -732,6 +781,72 @@ function AddUserModal({ role, onClose, onSuccess }) {
     </div>
   );
 }
+
+// Auxiliary function to get connected devices from the alert list
+function getConnectedDevices(devices, alerts) {
+  const disconnectedUserIds = new Set(
+    alerts.filter(a => a.severity === 'GREY').map(a => a.userId)
+  );
+  return devices.filter(d => {
+    const userId = d.user?.id;
+    return userId && !disconnectedUserIds.has(userId);
+  });
+}
+
+function DevicePanel({ devices, alerts }) {
+  const disconnectedIds = new Set(
+    alerts
+      .filter(a => a.severity === 'GREY')
+      .map(a => a.userId)
+  );
+
+  // Map userId -> device, mark connected/disconnected
+  const deviceRows = devices.map(d => ({
+    ...d,
+    isConnected: !disconnectedIds.has(d.userId ?? d.user?.id),
+  }));
+
+  const connected = getConnectedDevices(devices, alerts);
+
+  return (
+    <div style={{
+      background: '#fff', borderRadius: 14,
+      border: '1.5px solid #dce8f5',
+      overflow: 'hidden', marginTop: 16,
+    }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #dce8f5' }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: P.primary }}>
+          Devices — {connected.length}/{deviceRows.length} connected
+        </h2>
+      </div>
+      <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+        {connected.length === 0 && (
+          <p style={{ textAlign: 'center', color: '#aab8c8', fontSize: 13, padding: 20 }}>
+            No connected devices
+          </p>
+        )}
+        {connected.map(d => (
+          <div key={d.id} style={{
+            padding: '10px 16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            borderBottom: '1px solid #f4f7fb',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <StatusDot status="ok" size={8} />
+              <span style={{ fontSize: 13, color: P.primary, fontWeight: 600 }}>
+                Device {d.id}
+              </span>
+            </div>
+            <span style={{ fontSize: 12, color: '#5a7494' }}>
+              {d.batteryLevel != null ? `🔋 ${d.batteryLevel}%` : 'No battery data'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 /* ─────────────────────────────────────────
    NAVBAR
@@ -824,10 +939,12 @@ function Dashboard() {
   const [residents, setResidents]   = useState([]);
   const [hydration, setHydration]   = useState({});
   const [alerts, setAlerts]         = useState([]);
+  const [devices, setDevices]       = useState([]);
   const [loading, setLoading]       = useState(true);
   const [selected, setSelected]     = useState(null);
   const [modal, setModal]           = useState(null);
   const [connCode, setConnCode]     = useState('');
+
 
   const load = useCallback(async (showSpinner = true) => {
     if (!token) return;
@@ -844,7 +961,10 @@ function Dashboard() {
       }));
       setHydration(hydMap);
 
-      const alertsData = await api.getAlerts(token);
+      const deviceList = await api.listDevices(user?.organizationId, token);
+      setDevices(Array.isArray(deviceList) ? deviceList : []);
+
+      const alertsData = await api.getAlerts(token, user?.organizationId);
       setAlerts(Array.isArray(alertsData) ? alertsData : []);
     } catch (e) {
       console.error("Erreur de chargement:", e);
@@ -855,21 +975,10 @@ function Dashboard() {
   useEffect(() => { load(); }, [load]);
   
   useEffect(() => {
-    const interval = setInterval(() => load(false), 5000);
+    const interval = setInterval(() => load(false), 10000);
     return () => clearInterval(interval);
   }, [load]);
 
-  // TODO: subscribe to WebSocket for real-time alerts
-  // e.g. const ws = new WebSocket(WS_URL); ws.onmessage = handleWsMessage;
-
-  const resolveAlert = async (alertId) => {
-    try {
-      await api.resolveAlert(alertId, token);
-      setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, isResolved: true } : a));
-    } catch (e) {
-      console.error("Erreur résolution alerte:", e);
-    }
-  };
 
   const activeAlerts = alerts.filter(a => !a.isResolved);
   const espConnected = residents.filter(r => r.esp32Id).length; // Utilise esp32Id
@@ -961,8 +1070,10 @@ function Dashboard() {
 
           {/* Notifications */}
           <div style={{ position:'sticky', top:80, height:'calc(100vh - 104px)' }}>
-            <NotifPanel alerts={alerts} residents={residents} onResolve={resolveAlert} />
+            <NotifPanel alerts={alerts} residents={residents} />
+            <DevicePanel devices={devices} alerts={alerts} />
           </div>
+          
         </div>
       </div>
 
@@ -971,6 +1082,7 @@ function Dashboard() {
       {selected && (
         <ResidentModal
           resident={selected}
+          devices={devices}
           hydration={hydration[selected.id] || 0}
           alerts={alerts}
           onClose={() => setSelected(null)}
