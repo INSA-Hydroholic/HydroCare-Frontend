@@ -34,7 +34,6 @@ const api = {
   },
 
   getResidents: async (token) => {
-    // Correction : ajout du préfixe /api/
     const res = await fetch(`${API_BASE_URL}/api/users`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
@@ -70,16 +69,36 @@ const api = {
     return res.json();
   },
 
+  //TODO : changer inviteNurse en addUser(role:nurse)
   inviteNurse: async (email, name) => {
     await new Promise(r => setTimeout(r, 700));
   },
   
+  //TODO : changer l'endpoint
   resolveAlert: async (alertId, token) => {
     const res = await fetch(`${API_BASE_URL}/api/alerts/${alertId}/resolve`, {
       method: 'PATCH',
       headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) throw new Error('Erreur résolution alerte');
+    return res.json();
+  },
+
+  addUser: async (role: 'nurse' | 'resident', data: { username: string, email: string, password: string }, token: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/users/addUser/${role}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Erreur lors de la création');
+    return res.json();
+  },
+
+  getConnectionCode: async (organizationId: number, token: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/device/${organizationId}/connectionCode`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('Erreur code de connexion');
     return res.json();
   },
 };
@@ -334,11 +353,11 @@ function LoginPage() {
           <label style={{ fontSize:12, fontWeight:600, color:'#5a7494', display:'block', marginBottom:4 }}>
             Identifiant (Username)
           </label>
-          <input 
-            type="text" 
-            placeholder="Ex: jean_nurse" 
-            value={form.username} // Corrigé
-            onChange={set('username')} // Corrigé
+          <input
+            type="text"
+            placeholder="Ex: jean_nurse"
+            value={form.username}
+            onChange={set('username')}
             onKeyDown={handleKey} 
           />
         </div>
@@ -367,8 +386,15 @@ function LoginPage() {
    RESIDENT DETAIL MODAL
 ───────────────────────────────────────── */
 function ResidentModal({ resident, hydration, alerts, onClose }) {
+
+  // Changer
+  //////////////////////////////////////////////////////////////////////
   const [espInput, setEspInput] = useState(resident.esp32Id ? String(resident.esp32Id) : '');
   const [espStatus, setEspStatus] = useState(resident.esp32Id ? 'disconnected' : 'none');
+  //////////////////////////////////////////////////////////////////////
+
+
+
   const [saving, setSaving]       = useState(false);
   const cleanupRef = useRef(null);
 
@@ -631,6 +657,60 @@ function NotifPanel({ alerts, residents, onResolve }) {
   );
 }
 
+function AddUserModal({ role, onClose, onSuccess }) {
+  const { token } = useAuth();
+  const [form, setForm] = useState({ username: '', email: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    if (!form.username || !form.email || !form.password) {
+      setError('Please fill in all fields');
+      return;
+    }
+    setLoading(true);
+    try {
+      await api.addUser(role, form, token);
+      onSuccess();
+      onClose();
+    } catch(e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  };
+
+  const label = role === 'nurse' ? 'infirmier(ère)' : 'résident(e)';
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ padding: 24, maxWidth: 400 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: P.primary, marginBottom: 20 }}>
+          Ajouter un(e) {label}
+        </h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {['username', 'email', 'password'].map(field => (
+            <div key={field}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#5a7494', display: 'block', marginBottom: 4 }}>
+                {field === 'username' ? 'Identifiant' : field === 'email' ? 'Email' : 'Mot de passe'}
+              </label>
+              <input
+                type={field === 'password' ? 'password' : 'text'}
+                value={form[field]}
+                onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+              />
+            </div>
+          ))}
+          {error && <p style={{ color: '#e84040', fontSize: 13 }}>{error}</p>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <Btn variant="primary" onClick={submit} loading={loading}>Créer</Btn>
+            <Btn variant="ghost" onClick={onClose}>Annuler</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────
    NAVBAR
 ───────────────────────────────────────── */
@@ -718,12 +798,14 @@ function Navbar({ alertCount }) {
    DASHBOARD
 ───────────────────────────────────────── */
 function Dashboard() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [residents, setResidents]   = useState([]);
   const [hydration, setHydration]   = useState({});
   const [alerts, setAlerts]         = useState([]);
   const [loading, setLoading]       = useState(true);
   const [selected, setSelected]     = useState(null);
+  const [modal, setModal]           = useState(null);
+  const [connCode, setConnCode]     = useState('');
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -793,9 +875,36 @@ function Dashboard() {
         <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:20, alignItems:'start' }}>
           {/* Resident grid */}
           <div>
-            <h2 style={{ fontSize:15, fontWeight:600, color:P.primary, marginBottom:16 }}>
-              Résidents
-            </h2>
+
+            // Buttons
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+              <h2 style={{ fontSize:15, fontWeight:600, color:P.primary }}>
+                Résidents
+              </h2>
+              <div style={{ display:'flex', gap:8 }}>
+                <Btn variant="ghost" style={{ fontSize:12, padding:'7px 14px' }}
+                  onClick={async () => {
+                    const data = await api.getConnectionCode(user?.organizationId, token);
+                    setConnCode(data.connectionCode);
+                    setModal('code');
+                    console.log('user:', user);
+
+                  }}>
+                  Connection code
+                </Btn>
+                <Btn variant="ghost" style={{ fontSize:12, padding:'7px 14px' }}
+                  onClick={() => setModal('resident')}>
+                  
+                  + Resident
+                </Btn>
+                <Btn variant="secondary" style={{ fontSize:12, padding:'7px 14px' }}
+                  onClick={() => setModal('nurse')}>
+                  + Nurse
+                </Btn>
+              </div>
+            </div>
+
+
             {loading ? (
               <div style={{ display:'flex', justifyContent:'center', padding:60 }}>
                 <Spinner size={32} />
@@ -828,6 +937,7 @@ function Dashboard() {
       </div>
 
       {/* Modal */}
+      // Pop-Up for clicking a resident
       {selected && (
         <ResidentModal
           resident={selected}
@@ -836,6 +946,40 @@ function Dashboard() {
           onClose={() => setSelected(null)}
         />
       )}
+
+      // Pop-Up for adding nurse or resident
+      {(modal === 'nurse' || modal === 'resident') && (
+        <AddUserModal
+          role={modal}
+          onClose={() => setModal(null)}
+          onSuccess={load}
+        />
+      )}
+
+      // Pop-Up for connection code
+      {modal === 'code' && (
+        <div className="overlay" onClick={() => setModal(null)}>
+          <div className="modal" style={{ padding:32, maxWidth:420 }}
+            onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize:13, color:'#5a7494', marginBottom:8 }}>
+              To connect a new device, boot it up. It will create a new WiFi network that will,
+              upon connection, redirect you to a webpage. Enter your WiFi's SSID, password,
+              and the code below to connect it:
+            </p>
+            <div style={{
+              fontSize:32, fontWeight:700, letterSpacing:8, textAlign:'center',
+              color:P.secondary, background:'#f4f7fb',
+              padding:'16px 24px', borderRadius:10, margin:'20px 0',
+            }}>
+              {connCode}
+            </div>
+            <Btn variant="ghost" onClick={() => setModal(null)} style={{ width:'100%', justifyContent:'center' }}>
+              Close
+            </Btn>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
