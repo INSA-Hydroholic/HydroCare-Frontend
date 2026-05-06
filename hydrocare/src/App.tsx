@@ -100,7 +100,7 @@ const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     });
-    if (!res.ok) throw new Error('Error affecting device. It may already be in use');
+    if (!res.ok) throw new Error('Erreur à l\'affectation du device. Il est peut-être déjà utilisé');
     return res.json();
   },
 
@@ -109,7 +109,7 @@ const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     });
-    if (!res.ok) throw new Error('Error affecting device. It may already be in use');
+    if (!res.ok) throw new Error('Erreur à la désaffectation du device.');
     return res.json();
   },
 
@@ -441,7 +441,7 @@ function ResidentModal({ resident, devices, hydration, alerts, onClose }) {
     try {
       await api.bindUserDevice(resident.id, selectedDeviceId, token);
     } catch (err) {
-      setDeviceError('Failed to assign device. Please try again.');
+      setDeviceError('L\'affectation du device a échoué.');
     }
     setSaving(false);
   };
@@ -453,7 +453,7 @@ function ResidentModal({ resident, devices, hydration, alerts, onClose }) {
       await api.unbindUserDevice(resident.id, selectedDeviceId, token);
       setSelectedDeviceId('');
     } catch (err) {
-      setDeviceError('Failed to disconnect device.');
+      setDeviceError('La désaffectation du device a échoué.');
     }
     setSaving(false);
   };
@@ -535,7 +535,7 @@ function ResidentModal({ resident, devices, hydration, alerts, onClose }) {
           <div style={{ borderTop:`1px solid #dce8f5`, paddingTop:20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 600, color: '#5a7494', margin: 0 }}>
-                  ESP32 Device
+                  Hydrobase
                 </h3>
                 
                 {resident.esp32 && (
@@ -558,8 +558,8 @@ function ResidentModal({ resident, devices, hydration, alerts, onClose }) {
               />
               
               <span style={{ fontSize: 13, color: '#5a7494', textTransform: 'capitalize' }}>
-                {espStatus === 'unbound' ? 'Unbound' :
-                espStatus === 'disconnected' ? 'Disconnected' : 'Connected'}
+                {espStatus === 'unbound' ? 'Pas de base associée' :
+                espStatus === 'disconnected' ? 'Déconnecté' : 'Connecté'}
               </span>
               
               {saving && <Spinner size={12} />}
@@ -574,7 +574,7 @@ function ResidentModal({ resident, devices, hydration, alerts, onClose }) {
                 color: P.primary, background: '#fff', cursor: 'pointer',
               }}
             >
-              <option value="">— Select a device —</option>
+              <option value="">— Choisissez un dispositif—</option>
               {devices.map(d => (
                 <option key={d.id} value={d.macAddress}>
                   Device {d.macAddress}
@@ -594,7 +594,7 @@ function ResidentModal({ resident, devices, hydration, alerts, onClose }) {
                 disabled={!selectedDeviceId}
                 style={{ flex: 1, justifyContent: 'center' }}
               >
-                Connect
+                Connecter
               </Btn>
               <Btn
                 variant="danger"
@@ -603,7 +603,7 @@ function ResidentModal({ resident, devices, hydration, alerts, onClose }) {
                 disabled={!resident.esp32?.macAddress}
                 style={{ flex: 1, justifyContent: 'center' }}
               >
-                Disconnect
+                Déconnecter
               </Btn>
             </div>
 
@@ -1029,16 +1029,16 @@ function Dashboard() {
                     console.log('user:', user);
 
                   }}>
-                  Connection code
+                  Code de Connexion Hydrobase
                 </Btn>
                 <Btn variant="ghost" style={{ fontSize:12, padding:'7px 14px' }}
                   onClick={() => setModal('resident')}>
                   
-                  + Resident
+                  + Résident
                 </Btn>
                 <Btn variant="secondary" style={{ fontSize:12, padding:'7px 14px' }}
                   onClick={() => setModal('nurse')}>
-                  + Nurse
+                  + Infirmier
                 </Btn>
               </div>
             </div>
@@ -1104,9 +1104,10 @@ function Dashboard() {
           <div className="modal" style={{ padding:32, maxWidth:420 }}
             onClick={e => e.stopPropagation()}>
             <p style={{ fontSize:13, color:'#5a7494', marginBottom:8 }}>
-              To connect a new device, boot it up. It will create a new WiFi network that will,
-              upon connection, redirect you to a webpage. Enter your WiFi's SSID, password,
-              and the code below to connect it:
+                        Pour connecter un nouvel appareil, allumez-le.
+                        Il va créer un nouveau réseau WiFi qui vous redirigera, après connexion,
+                        vers une page web. Saisissez le nom (SSID) de votre WiFi, son mot de passe,
+                        ainsi que le code ci-dessous pour le configurer :
             </p>
             <div style={{
               fontSize:32, fontWeight:700, letterSpacing:8, textAlign:'center',
